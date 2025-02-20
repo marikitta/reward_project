@@ -1,0 +1,107 @@
+function doPost (e) {
+  const contents = JSON.parse(e.postData.contents)
+  getSheetById(DebagSheetId).getRange(1,1).setValue(JSON.stringify(contents,null,7))
+  const chat_id=contents.message.from.id //наш id чата
+  let cust_ans = contents.message.text  // ответ пользователя
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const userState = scriptProperties.getProperty("user_"+chat_id);
+
+
+  if (cust_ans == "/addnewclass"){
+    sendText(chat_id,"Введите класс (Пример: 7А)");
+    scriptProperties.setProperty("user_" + chat_id, "waiting_for_class"); // Запоминаем, что ждем ввод класса
+    return ContentService.createTextOutput("OK");
+  }
+  if (userState == "waiting_for_class") {
+    scriptProperties.deleteProperty("user_" + chat_id); // Убираем состояние ожидания
+    let allData = getSheetById(ClassesSheetId).getDataRange().getDisplayValues();
+    let found = false;
+    for (let i = 0; i < allData.length; i++) {
+      if (allData[i][0] == cust_ans) {
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      sendText(chat_id, "Такой класс уже есть");
+    } else {
+      getSheetById(ClassesSheetId).appendRow([cust_ans]);
+      sendText(chat_id, "Класс записан");
+    }
+    return ContentService.createTextOutput("OK");
+  }
+
+  if (cust_ans == "/addnewstudent") {
+    sendText(chat_id, "Введите Фамилию Имя Класс ученика (пример: Иванов Иван 10А)");
+    scriptProperties.setProperty("user_" + chat_id, "waiting_for_student");
+    return ContentService.createTextOutput("OK");
+  }
+
+  if (userState && userState == "waiting_for_student") {
+    scriptProperties.deleteProperty("user_" + chat_id); // Убираем состояние ожидания
+    let parts = cust_ans.trim().split(" "); // Разбиваем строку на части
+    if (parts.length < 3) {
+      sendText(chat_id, "Ошибка! Введите данные в формате: Иванов Иван 10А");
+      return ContentService.createTextOutput("OK");
+    }
+    let studentName = parts.slice(0, -1).join(" "); // Фамилия Имя (всё кроме последнего слова)
+    let studentClass = parts[parts.length - 1]; // Последнее слово - это класс
+    scriptProperties.setProperty("user_" + chat_id, "waiting_for_RFID");
+    scriptProperties.setProperty("user_" + chat_id + "_name", studentName);
+    scriptProperties.setProperty("user_" + chat_id + "_class", studentClass);
+    sendText(chat_id, "Приложите карту ученика");
+    return ContentService.createTextOutput("OK");
+  }
+  
+
+  if (userState == "waiting_for_RFID"){
+    let studentName = scriptProperties.getProperty("user_"+chat_id + "_name");
+    let studentClass = scriptProperties.getProperty("user_"+chat_id + "_class");
+    scriptProperties.deleteProperty("user_" + chat_id); //убираем состояние ожидания rfid
+    scriptProperties.deleteProperty("user_" + chat_id + "_name"); // убираем имя
+    scriptProperties.deleteProperty("user_" + chat_id + "_class"); //убираем класс
+    let rfid = cust_ans;
+      if (rfid.length < 2){
+        sendText(chat_id, "Ошибка!");
+        return ContentService.createTextOutput("OK");
+      }
+    getSheetById(StudentsSheetId).appendRow([studentName, studentClass, rfid]);
+    sendText(chat_id, `Ученик ${studentName} (${studentClass}) добавлен.`);
+    return ContentService.createTextOutput("OK");
+  }
+  //return ContentService.createTextOutput("Команда не распознана");
+
+
+
+  let parts = cust_ans.trim().split(" ");
+  if (parts.length == 2 && /^-?\d+$/.test(parts[1])) {
+    let rfid = parts[0]; // RFID карты
+    let points = parseInt(parts[1]); // Количество баллов
+
+    let studentsData = getSheetById(StudentsSheetId).getDataRange().getValues(); // Ищем ученика по RFID в StudentsSheet
+    let found = false;
+    let studentName = "";
+    let studentClass = "";
+
+    for (let i = 0; i < studentsData.length; i++) {
+      if (studentsData[i][2] == rfid) { // RFID в 3-м столбце
+        studentName = studentsData[i][0]; // Имя ученика в 1-м столбце
+        studentClass = studentsData[i][1]; // Класс ученика во 2-м столбце
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      sendText(chat_id, "Ошибка! Ученик с таким RFID не найден.");
+      return ContentService.createTextOutput("OK");
+    }
+    // Записываем баллы в ScoreSheet
+    let date = new Date();
+    getSheetById(ScoreSheetId).appendRow([date, rfid, studentName, studentClass, points]);
+
+    sendText(chat_id, `✅ Ученик ${studentName} (${studentClass}) получил ${points} баллов.`);
+    return ContentService.createTextOutput("OK");
+  }
+
+
+}
