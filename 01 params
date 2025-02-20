@@ -1,0 +1,15 @@
+const token = "input"  //токен нашего бота
+const SsId = "input"  //id нашей таблицы (взяли из ссылки)
+const DebagSheetId = input
+const ClassesSheetId = input
+const StudentsSheetId = input
+const ScoreSheetId = input
+
+
+function start() {
+  let webAppUrl = 'input';
+  let url = `https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`;
+  console.log(url)
+  let resp = UrlFetchApp.fetch(url);
+  console.log(resp.getContentText());
+}
